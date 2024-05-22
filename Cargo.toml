@@ -18,7 +18,6 @@ image = "0.25"
 libcosmic = { git = "https://github.com/pop-os/libcosmic", features = [
     "wayland",
     "tokio",
-    "dbus-config",
 ] }
 cosmic-bg-config = { git = "https://github.com/pop-os/cosmic-bg" }
 memmap2 = "0.9.0"
