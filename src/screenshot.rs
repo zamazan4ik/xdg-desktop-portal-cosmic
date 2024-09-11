@@ -509,7 +509,7 @@ impl Screenshot {
         })
     }
 
-    #[zbus(property)]
+    #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
         2
     }
