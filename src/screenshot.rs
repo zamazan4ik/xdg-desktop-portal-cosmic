@@ -17,7 +17,7 @@ use rustix::fd::AsFd;
 use std::borrow::Cow;
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::{collections::HashMap, fmt::Debug, path::PathBuf};
+use std::{collections::HashMap, fmt, path::PathBuf};
 use tokio::sync::mpsc::Sender;
 
 use wayland_client::protocol::wl_output::{self, WlOutput};
@@ -33,8 +33,8 @@ use crate::{fl, subscription, PortalResponse};
 #[derive(Clone)]
 pub struct DndCommand(pub Arc<Box<dyn Send + Sync + Fn() -> ActionInner>>);
 
-impl Debug for DndCommand {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for DndCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DndCommand").finish()
     }
 }
@@ -381,6 +381,28 @@ pub struct Args {
     pub choice: Choice,
     pub location: ImageSaveLocation,
     pub action: Action,
+}
+
+impl fmt::Debug for Args {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Args")
+            .field("handle", &self.handle)
+            .field("app_id", &self.app_id)
+            .field("parent_window", &self.parent_window)
+            .field(
+                "output_images",
+                &self.output_images.keys().collect::<Vec<_>>(),
+            )
+            .field(
+                "toplevel_images",
+                &self.toplevel_images.keys().collect::<Vec<_>>(),
+            )
+            .field("options", &self.options)
+            .field("choice", &self.choice)
+            .field("action", &self.action)
+            .field("location", &self.location)
+            .finish()
+    }
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Screenshot")]

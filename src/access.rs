@@ -99,7 +99,7 @@ pub enum Msg {
     Choice(usize, usize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct AccessDialogArgs {
     pub handle: zvariant::ObjectPath<'static>,
     pub app_id: String,
