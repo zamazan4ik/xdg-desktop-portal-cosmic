@@ -8,12 +8,13 @@ use cosmic::widget::{self, button, dropdown, icon, text, Column};
 use cosmic::{
     iced::{
         keyboard::{key::Named, Key},
-        widget::column,
+        widget::{column, row},
         window,
     },
     iced_core::Alignment,
 };
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 use tokio::sync::mpsc::Sender;
 use zbus::zvariant;
 
@@ -70,6 +71,20 @@ impl Access {
         // await response via channel
         log::debug!("Access dialog {app_id} {parent_window} {title} {subtitle} {body} {options:?}");
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        // `widget::dialog` needs a slice of labels
+        let choice_labels: Vec<Vec<String>> = options
+            .choices
+            .iter()
+            .flatten()
+            .map(|(_, _, choices, _)| choices.iter().map(|(_, label)| label.clone()).collect())
+            .collect();
+        let active_choices = options
+            .choices
+            .iter()
+            .flatten()
+            .map(|(id, _, _, initial)| (id.clone(), initial.clone()))
+            .filter(|(_, value)| !value.is_empty())
+            .collect();
         if let Err(err) = self
             .tx
             .send(subscription::Event::Access(AccessDialogArgs {
@@ -80,6 +95,8 @@ impl Access {
                 subtitle: subtitle.to_string(),
                 body: body.to_string(),
                 options,
+                active_choices,
+                choice_labels,
                 tx,
             }))
             .await
@@ -110,6 +127,8 @@ pub(crate) struct AccessDialogArgs {
     pub subtitle: String,
     pub body: String,
     pub options: AccessDialogOptions,
+    pub active_choices: HashMap<String, String>,
+    pub choice_labels: Vec<Vec<String>>,
     pub tx: Sender<PortalResponse<AccessDialogResult>>,
 }
 
@@ -157,10 +176,18 @@ pub(crate) fn view(portal: &CosmicPortal) -> cosmic::Element<Msg> {
         return text("Oops, no access dialog args").into();
     };
 
-    let choices = &portal.access_choices;
-    let mut options = Vec::with_capacity(choices.len() + 3);
-    for (i, choice) in choices.iter().enumerate() {
-        options.push(dropdown(choice.1.as_slice(), choice.0, move |j| Msg::Choice(i, j)).into());
+    let choices = &args.options.choices.as_deref().unwrap_or(&[]);
+    let mut options = Vec::with_capacity(choices.len());
+    for (i, ((id, label, choices, initial), choice_labels)) in
+        choices.iter().zip(&args.choice_labels).enumerate()
+    {
+        let label = text(label);
+        let active_choice = args
+            .active_choices
+            .get(id)
+            .and_then(|choice_id| choices.iter().position(|(x, _)| x == choice_id));
+        let dropdown = dropdown(&choice_labels, active_choice, move |j| Msg::Choice(i, j));
+        options.push(row![label, dropdown].into());
     }
 
     let options = Column::with_children(options)
@@ -217,11 +244,10 @@ pub fn update_msg(portal: &mut CosmicPortal, msg: Msg) -> cosmic::Command<crate:
         Msg::Allow => {
             let args = portal.access_args.take().unwrap();
             let tx = args.tx.clone();
+            let choices = args.active_choices.clone().into_iter().collect();
             tokio::spawn(async move {
-                tx.send(PortalResponse::Success(AccessDialogResult {
-                    choices: vec![],
-                }))
-                .await
+                tx.send(PortalResponse::Success(AccessDialogResult { choices }))
+                    .await
             });
 
             args.destroy_surface()
@@ -238,7 +264,12 @@ pub fn update_msg(portal: &mut CosmicPortal, msg: Msg) -> cosmic::Command<crate:
         }
         Msg::Choice(i, j) => {
             let args = portal.access_args.as_mut().unwrap();
-            portal.access_choices[i].0 = Some(j);
+            if let Some(choice) = args.options.choices.as_ref().and_then(|x| x.get(i)) {
+                if let Some((option_id, _)) = choice.2.get(j) {
+                    args.active_choices
+                        .insert(choice.0.clone(), option_id.clone());
+                }
+            }
             cosmic::iced::Command::none()
         }
     }
