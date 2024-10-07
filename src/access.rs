@@ -4,11 +4,12 @@ use cosmic::iced::wayland::actions::layer_surface::SctkLayerSurfaceSettings;
 use cosmic::iced::wayland::actions::window::SctkWindowSettings;
 use cosmic::iced_sctk::commands::layer_surface::{destroy_layer_surface, get_layer_surface};
 use cosmic::iced_sctk::commands::window::{close_window, get_window};
-use cosmic::widget::{button, container, dropdown, horizontal_space, icon, text, Row};
+use cosmic::widget::{self, button, dropdown, icon, text, Column};
 use cosmic::{
     iced::{
-        widget::{column, row},
-        window, Length,
+        keyboard::{key::Named, Key},
+        widget::column,
+        window,
     },
     iced_core::Alignment,
 };
@@ -17,6 +18,7 @@ use tokio::sync::mpsc::Sender;
 use zbus::zvariant;
 
 use crate::wayland::WaylandHelper;
+use crate::widget::keyboard_wrapper::KeyboardWrapper;
 use crate::{app::CosmicPortal, fl};
 use crate::{subscription, PortalResponse};
 
@@ -160,52 +162,52 @@ pub(crate) fn view(portal: &CosmicPortal) -> cosmic::Element<Msg> {
     for (i, choice) in choices.iter().enumerate() {
         options.push(dropdown(choice.1.as_slice(), choice.0, move |j| Msg::Choice(i, j)).into());
     }
-    options.push(horizontal_space(Length::Fill).into());
-    options.push(
-        button::text(
+
+    let options = Column::with_children(options)
+        .spacing(spacing.space_xxs as f32) // space_l
+        .align_items(Alignment::Center);
+
+    let icon = icon::Icon::from(
+        icon::from_name(
             args.options
-                .deny_label
-                .clone()
-                .unwrap_or_else(|| fl!("cancel")),
+                .icon
+                .as_ref()
+                .map_or("image-missing", |name| name.as_str()),
         )
-        .on_press(Msg::Cancel)
-        .into(),
-    );
-    options.push(
-        button::text(
-            args.options
-                .grant_label
-                .clone()
-                .unwrap_or_else(|| fl!("allow")),
-        )
-        .on_press(Msg::Allow)
-        .style(cosmic::theme::Button::Suggested)
-        .into(),
+        .size(64),
     );
 
-    container(
-        column![
-            row![
-                icon::Icon::from(
-                    icon::from_name(
-                        args.options
-                            .icon
-                            .as_ref()
-                            .map_or("image-missing", |name| name.as_str())
-                    )
-                    .size(64)
-                )
-                .width(Length::Fixed(64.0))
-                .height(Length::Fixed(64.0)), // TODO icon for the dialog
-                text(args.title.as_str()),
-                text(args.subtitle.as_str()),
-                text(args.body.as_str()),
-            ],
-            Row::with_children(options)
-                .spacing(spacing.space_xxs as f32) // space_l
-                .align_items(Alignment::Center),
-        ]
-        .spacing(spacing.space_l as f32), // space_l
+    let control = column![text(args.body.as_str()), options].spacing(spacing.space_m as f32);
+
+    let cancel_button = button::text(
+        args.options
+            .deny_label
+            .clone()
+            .unwrap_or_else(|| fl!("cancel")),
+    )
+    .on_press(Msg::Cancel);
+
+    let allow_button = button::text(
+        args.options
+            .grant_label
+            .clone()
+            .unwrap_or_else(|| fl!("allow")),
+    )
+    .on_press(Msg::Allow)
+    .style(cosmic::theme::Button::Suggested);
+
+    KeyboardWrapper::new(
+        widget::dialog(&args.title)
+            .body(&args.subtitle)
+            .control(control)
+            .icon(icon)
+            .secondary_action(cancel_button)
+            .primary_action(allow_button),
+        |key| match key {
+            Key::Named(Named::Enter) => Some(Msg::Allow),
+            Key::Named(Named::Escape) => Some(Msg::Cancel),
+            _ => None,
+        },
     )
     .into()
 }
